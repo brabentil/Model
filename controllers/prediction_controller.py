@@ -7,7 +7,7 @@ import joblib
 import uuid
 import traceback
 from datetime import datetime
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Optional, Union
 
 from transaction_transformer import TransactionTransformer
 
@@ -54,65 +54,61 @@ class PredictionController:
             "environment": os.getenv("ENVIRONMENT", "development")
         }
     
-    def predict_from_features(self, transaction: Transaction) -> Dict[str, Any]:
+    def predict_from_features(self, features: Union[List[float], pd.DataFrame]) -> Dict[str, Any]:
         """Make prediction from pre-processed feature vector"""
         if self.model is None:
             return self._get_fallback_prediction()
             
         try:
-            # print('Features:', features)
-            # # Validate feature count
-            # if len(features) != 30:
-            #     logger.warning(f"Expected 30 features, got {len(features)}")
-            #     return {
-            #         "error": f"Expected 30 features, got {len(features)}",
-            #         "prediction": self._get_fallback_prediction()["prediction"]
-            #     }
+            # Handle different input types
+            if isinstance(features, pd.DataFrame):
+                # If already a DataFrame, use it directly
+                features_df = features
+                # Ensure it has the right number of columns
+                if len(features_df.columns) != 30:
+                    logger.warning(f"Expected 30 features, got {len(features_df.columns)}")
+                    return {
+                        "error": f"Expected 30 features, got {len(features_df.columns)}",
+                        "prediction": self._get_fallback_prediction()["prediction"]
+                    }
+            else:
+                # Convert list to array then to DataFrame
+                # Validate feature count
+                if len(features) != 30:
+                    logger.warning(f"Expected 30 features, got {len(features)}")
+                    return {
+                        "error": f"Expected 30 features, got {len(features)}",
+                        "prediction": self._get_fallback_prediction()["prediction"]
+                    }
+                
+                features_array = np.array(features).reshape(1, -1)
+                features_df = pd.DataFrame(features_array, columns=self.feature_names)
             
-            # # Reshape for prediction and apply scaler if available
-            # features_array = np.array(features).reshape(1, -1)
-        
-            # if self.scaler:
-            #     features_df = pd.DataFrame(features_array, columns=self.feature_names)
-            #     features_scaled = self.scaler.transform(features_df)
-            # else:
-            #     features_scaled = features_array
+            # Scale features
+            if self.scaler:
+                features_scaled = self.scaler.transform(features_df)
+            else:
+                features_scaled = features_df.values
             
-            # # Make prediction
-            # prediction = bool(self.model.predict(features_scaled)[0] == 1)
-            # # Error from here
-            # probability = float(self.model.predict_proba(features_scaled)[0][1])
-            # risk_level = self._get_risk_level(probability)
-            data = pd.DataFrame([transaction])
-            print('Data:', data)
-            if len(data.columns) != 30:
-                logger.warning(f"Expected 30 features, got {data.columns}")
-                return {
-                    "error": f"Expected 30 features, got  {data.columns}",
-                    "prediction": self._get_fallback_prediction()["prediction"]
-                }
-            scaled_data = self.scaler.transform(data)
-            prediction = self.model.predict(scaled_data)
-            prediction_proba = self.model.predict_proba(scaled_data)
-            print('Prediction:', prediction)
-            print('Prediction Probability:', prediction_proba)
-
-            return {"fraud_prediction": "Fraud" if int(prediction[0]) == 1  else "Non-Fraud", "probability": float(prediction_proba[0][1])}
+            # Make prediction
+            prediction = bool(self.model.predict(features_scaled)[0] == 1)
+            probability = float(self.model.predict_proba(features_scaled)[0, 1])
+            risk_level = self._get_risk_level(probability)
             
-            # return {
-            #     "prediction": {
-            #         "is_fraud": prediction,
-            #         "fraud_probability": probability,
-            #         "risk_level": risk_level
-            #     },
-            #     "processed_at": datetime.now().isoformat(),
-            #     "model_version": self.model_version,
-            #     "feature_importance": self._get_feature_importance(features_scaled)
-            # }
+            return {
+                "prediction": {
+                    "is_fraud": prediction,
+                    "fraud_probability": probability,
+                    "risk_level": risk_level
+                },
+                "processed_at": datetime.now().isoformat(),
+                "model_version": self.model_version,
+                "feature_importance": self._get_feature_importance(features_scaled)
+            }
             
         except Exception as e:
-            # Error from here
-            logger.error(f"Error making prediction from features: {e}")
+            stack_trace = traceback.format_exc()
+            logger.error(f"Error making prediction from features: {e}\n{stack_trace}")
             return {
                 "error": str(e),
                 "prediction": self._get_fallback_prediction()["prediction"]
