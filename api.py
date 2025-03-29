@@ -102,7 +102,7 @@ async def predict(data: TransactionData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
-@app.post("/predict/raw")
+@app.post("/raw")
 async def predict_raw_transaction(transaction: RawTransactionData):
     """
     Endpoint that accepts raw transaction data and transforms it
