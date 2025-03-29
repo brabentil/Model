@@ -8,6 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from transaction_transformer import TransactionTransformer
 import pandas as pd
+from routes.api_routes import router
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +20,9 @@ logger = logging.getLogger("fraud_detection_api")
 # Initialize FastAPI app
 app = FastAPI(title="Credit Card Fraud Detection API", 
               description="API for detecting fraudulent credit card transactions",
-              version="1.0.0")
+              version="1.0.0",
+              docs_url="/docs",
+              redoc_url="/redoc")
 
 # Add CORS middleware
 app.add_middleware(
@@ -29,6 +32,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include our routes
+app.include_router(router, prefix="")
 
 # Initialize TransactionTransformer
 transformer = TransactionTransformer()
@@ -207,3 +213,14 @@ def get_top_features_for_prediction(features_array):
         {"feature": "Amount", "importance": 0.12},
         {"feature": "V17", "importance": 0.10}
     ]
+
+@app.on_event("startup")
+async def startup_event():
+    """Log information on startup"""
+    logger.info("Starting Fraud Detection API")
+    logger.info(f"Environment: {os.environ.get('ENVIRONMENT', 'development')}")
+    
+    # Log all available routes for debugging
+    routes = [{"path": route.path, "name": route.name, "methods": route.methods} 
+              for route in app.routes]
+    logger.info(f"Available routes: {routes}")
