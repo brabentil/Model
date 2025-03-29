@@ -21,6 +21,17 @@ app = FastAPI(title="Fallback Credit Card Fraud API")
 class PredictionInput(BaseModel):
     features: List[float]
 
+class RawTransactionInput(BaseModel):
+    """Simple model for raw transaction data"""
+    card_number: str = None
+    transaction_date: str = None
+    transaction_amount: float
+    merchant_category: str = None
+    merchant_name: str = None
+    # Allow for additional fields
+    class Config:
+        extra = "allow"
+
 @app.get("/")
 def read_root():
     return {"message": "Fallback API is running", "status": "model not available"}
@@ -50,4 +61,19 @@ async def predict(data: PredictionInput):
         "fraud_probability": 0.01,
         "is_fraud": False,
         "note": "This is a fallback response as the actual model could not be loaded"
+    }
+
+@app.post("/predict/raw")
+async def predict_raw_transaction(transaction: RawTransactionInput):
+    """
+    Fallback endpoint for raw transaction data that always returns non-fraud
+    """
+    # Log incoming request
+    logger.info(f"Received raw transaction: Amount={transaction.transaction_amount}, Merchant={transaction.merchant_name}")
+    
+    return {
+        "prediction": 0,
+        "fraud_probability": 0.01,
+        "is_fraud": False,
+        "note": "This is a fallback response as the raw prediction endpoint couldn't process the request"
     }

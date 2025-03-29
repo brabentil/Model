@@ -4,9 +4,17 @@ from pydantic import BaseModel
 import numpy as np
 import joblib
 import os
+import logging
 from typing import List, Dict, Any, Optional
 from transaction_transformer import TransactionTransformer
 import pandas as pd
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("fraud_detection_api")
 
 # Initialize FastAPI app
 app = FastAPI(title="Credit Card Fraud Detection API", 
@@ -101,11 +109,13 @@ async def predict_raw_transaction(transaction: RawTransactionData):
     into the format expected by the model
     """
     if model is None or scaler is None or transformer is None:
-        raise HTTPException(status_code=500, detail="Model, scaler or transformer not loaded")
+        # Log the issue
+        logger.error("Model components not loaded: predict/raw endpoint unavailable")
+        raise HTTPException(status_code=503, detail="Model, scaler or transformer not loaded")
     
     try:
         # Log incoming request for debugging
-        print(f"Received raw transaction request: {transaction}")
+        logger.info(f"Received raw transaction request: {transaction}")
         
         # Convert transaction to dictionary
         transaction_dict = transaction.dict()
@@ -114,7 +124,7 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         features = transformer.transform_raw_transaction(transaction_dict)
         
         # Log transformed features
-        print(f"Transformed features shape: {features.shape}")
+        logger.info(f"Transformed features shape: {features.shape}")
         
         # Ensure features has the correct shape
         if features.size != len(feature_names):
@@ -123,39 +133,9 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         # Create a TransactionData object to reuse the predict endpoint logic
         transaction_data = TransactionData(features=features.tolist())
         
-        # Call the predict function directly to avoid duplication
-        prediction_result = await predict(transaction_data)
+        # Call the predict endpoint
+        return await predict(transaction_data)
         
-        # Get accuracy estimate
-        accuracy_info = transformer.get_accuracy_estimate()
-        
-        # Enhance the prediction result with transaction-specific information
-        enhanced_result = {
-            **prediction_result,
-            "transaction_amount": transaction.amount,
-            "merchant": transaction.merchant_name,
-            "accuracy_info": accuracy_info,
-            "warning": "This prediction is based on transformed data and may have reduced accuracy",
-            "transaction_details": {
-                "timestamp": transaction.timestamp,
-                "is_online": transaction.is_online,
-                "card_present": transaction.card_present
-            }
-        }
-        
-        # Add optional fields if they exist
-        if transaction.merchant_category:
-            enhanced_result["transaction_details"]["merchant_category"] = transaction.merchant_category
-        if transaction.country:
-            enhanced_result["transaction_details"]["country"] = transaction.country
-            
-        return enhanced_result
-    
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid input data: {str(e)}")
     except Exception as e:
-        # Log the full error for debugging
-        import traceback
-        print(f"Error in predict_raw_transaction: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+        logger.error(f"Error processing raw transaction: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Raw prediction error: {str(e)}")
