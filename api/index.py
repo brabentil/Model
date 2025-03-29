@@ -4,33 +4,57 @@ import numpy as np
 import joblib
 import os
 from typing import List
-import pandas as pd
+import sys
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Print Python version and environment info for debugging
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Python path: {sys.executable}")
 
 # Initialize FastAPI app
 app = FastAPI(title="Credit Card Fraud Detection API")
 
-# Load the model
+# Define paths
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "fraud_detection_model.pkl")
 SCALER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "scaler.pkl")
 
+# Log paths for debugging
+logger.info(f"Model path: {MODEL_PATH}")
+logger.info(f"Scaler path: {SCALER_PATH}")
+
+# Initialize global variables
+model = None
+scaler = None
+feature_names = ['Time'] + [f'V{i}' for i in range(1, 29)] + ['Amount']
+
+# Try to import pandas, but provide a fallback if it's not available
+try:
+    import pandas as pd
+    logger.info("Successfully imported pandas")
+    PANDAS_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import pandas: {e}")
+    PANDAS_AVAILABLE = False
+
+# Load model and scaler
 try:
     model = joblib.load(MODEL_PATH)
-    print(f"Model loaded successfully from {MODEL_PATH}")
-    # Define feature names that match what was used during training
-    feature_names = ['Time'] + [f'V{i}' for i in range(1, 29)] + ['Amount']
+    logger.info(f"Model loaded successfully from {MODEL_PATH}")
     
     # Try to load the scaler
     try:
         scaler = joblib.load(SCALER_PATH)
-        print(f"Scaler loaded successfully from {SCALER_PATH}")
+        logger.info(f"Scaler loaded successfully from {SCALER_PATH}")
     except Exception as e:
-        print(f"Warning: Could not load scaler: {e}")
+        logger.warning(f"Could not load scaler: {e}")
         scaler = None
 except Exception as e:
-    print(f"Error loading model: {e}")
+    logger.error(f"Error loading model: {e}")
     model = None
-    feature_names = None
-    scaler = None
 
 # Define request data model
 class TransactionData(BaseModel):
@@ -42,9 +66,13 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    if model is not None:
-        return {"status": "healthy", "model_loaded": True, "scaler_loaded": scaler is not None}
-    return {"status": "unhealthy", "model_loaded": False}
+    return {
+        "status": "healthy" if model is not None else "unhealthy",
+        "model_loaded": model is not None,
+        "scaler_loaded": scaler is not None,
+        "pandas_available": PANDAS_AVAILABLE,
+        "python_version": sys.version
+    }
 
 @app.post("/predict")
 async def predict(data: TransactionData):
@@ -59,16 +87,20 @@ async def predict(data: TransactionData):
         if features.shape[1] != 30:  # Assuming 30 features
             raise HTTPException(status_code=400, detail=f"Expected 30 features, got {features.shape[1]}")
         
-        # Convert to DataFrame with feature names to avoid the warning
-        features_df = pd.DataFrame(features, columns=feature_names)
-        
-        # Scale features if scaler is available
-        if scaler is not None:
-            features_to_predict = scaler.transform(features_df)
+        # Use pandas if available for feature names
+        if PANDAS_AVAILABLE:
+            features_df = pd.DataFrame(features, columns=feature_names)
+            
+            # Scale features if scaler is available
+            if scaler is not None:
+                features_to_predict = scaler.transform(features_df)
+            else:
+                logger.warning("Using unscaled features as scaler is not available")
+                features_to_predict = features_df
         else:
-            # If no scaler, just use the raw features (assuming they're already normalized)
-            print("Warning: Using unscaled features for prediction as scaler is not available")
-            features_to_predict = features_df
+            # Fallback if pandas is not available
+            logger.warning("Using raw numpy arrays as pandas is not available")
+            features_to_predict = features if scaler is None else scaler.transform(features)
         
         # Make prediction
         prediction = model.predict(features_to_predict)[0]
@@ -80,4 +112,5 @@ async def predict(data: TransactionData):
             "is_fraud": bool(prediction == 1)
         }
     except Exception as e:
+        logger.error(f"Error during prediction: {e}")
         raise HTTPException(status_code=500, detail=f"Error making prediction: {str(e)}")
