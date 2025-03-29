@@ -113,8 +113,7 @@ async def predict(data: TransactionData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
-# Note: The /raw endpoint is now defined in routes/api_routes.py
-# The duplicate endpoint has been removed to prevent conflicts
+
 
 def get_risk_level(probability):
     """Calculate risk level based on fraud probability"""

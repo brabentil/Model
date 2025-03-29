@@ -4,6 +4,7 @@ import logging
 import os
 import joblib
 import uuid
+import traceback
 from datetime import datetime
 from typing import Dict, List, Tuple, Any, Optional
 
@@ -96,7 +97,7 @@ class PredictionController:
                 "prediction": self._get_fallback_prediction()["prediction"]
             }
     
-    def predict_from_raw_transaction(self, transaction: Dict[str, Any]) -> Dict[str, Any]:
+    def predict_from_raw_transaction(self, transaction_data: dict) -> Dict[str, Any]:
         """Make prediction from raw transaction data"""
         try:
             # Transform raw transaction to features
@@ -104,53 +105,12 @@ class PredictionController:
                 self.transformer = TransactionTransformer()
                 
             # Log the transaction with sensitive data removed
-            safe_transaction = {**transaction}
+            safe_transaction = {**transaction_data}
             if 'card_number' in safe_transaction:
                 safe_transaction['card_number'] = '****' + safe_transaction['card_number'][-4:]
             logger.info(f"Processing transaction: {safe_transaction}")
             
             # Transform the transaction
-            transformed_data = self.transformer.transform_raw_transaction(transaction)
-            logger.debug(f"Transformed features: {transformed_data}")
-            
-            # Extract values from transformed data in correct order
-            features = [
-                transformed_data["Time"],
-                *[transformed_data[f"V{i}"] for i in range(1, 29)],
-                transformed_data["Amount"]
-            ]
-            
-            # Use the standard prediction method
-            result = self.predict_from_features(features)
-            
-            # Add transaction ID if available
-            if 'transaction_id' in transaction:
-                result['transaction_id'] = transaction['transaction_id']
-            else:
-                result['transaction_id'] = 'unknown'
-                
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error in raw transaction prediction: {e}")
-            return {
-                "error": str(e),
-                "prediction": self._get_fallback_prediction()["prediction"],
-                "note": "Error processing raw transaction, using fallback"
-            }
-    
-    def predict_from_raw_transaction(self, transaction_data: dict) -> dict:
-        """
-        Process raw transaction data and return prediction results
-        
-        Args:
-            transaction_data: Dictionary containing raw transaction fields
-            
-        Returns:
-            Dictionary with prediction results
-        """
-        try:
-            # Use the transformer to convert raw transaction data to features
             features = self.transformer.transform_raw_transaction(transaction_data)
             
             # Convert features to the format expected by the model
@@ -171,10 +131,10 @@ class PredictionController:
             # Make prediction
             prediction = int(self.model.predict(features_scaled)[0])
             probability = float(self.model.predict_proba(features_scaled)[0, 1])
-            risk_level = self.get_risk_level(probability)
+            risk_level = self._get_risk_level(probability)
             
             # Get feature importance information
-            top_features = self.get_top_contributing_features(features_np[0])
+            top_features = self._get_feature_importance(features_np[0])
             
             return {
                 "prediction": prediction,
@@ -200,21 +160,42 @@ class PredictionController:
             Dictionary with transformed features that can be passed to predict endpoint
         """
         try:
+            # Log incoming transaction data for debugging
+            safe_transaction = {k: v for k, v in transaction_data.items() if k != 'card_number'}
+            logger.info(f"Transforming transaction: {safe_transaction}")
+            
             # Ensure transformer is available
             if self.transformer is None:
+                logger.info("Creating new transformer instance")
                 self.transformer = TransactionTransformer()
-                
-            # Transform raw transaction into features
-            features = self.transformer.transform_raw_transaction(transaction_data)
             
-            # Convert features to the format expected by the model
+            # Get the raw result from transformer
+            raw_features = self.transformer.transform_raw_transaction(transaction_data)
+            logger.debug(f"Raw features from transformer: {raw_features}")
+            
+            # Handle different return types from transformer
+            if isinstance(raw_features, dict):
+                # If it's a dictionary, extract features in correct order
+                features = [
+                    raw_features.get("Time", 0),
+                    *[raw_features.get(f"V{i}", 0) for i in range(1, 29)],
+                    raw_features.get("Amount", 0)
+                ]
+            elif isinstance(raw_features, (list, np.ndarray)):
+                # If it's already a list or array, use it directly
+                features = raw_features
+            else:
+                raise TypeError(f"Unexpected feature type: {type(raw_features)}")
+            
+            # Convert to numpy array for validation
             features_np = np.array(features).reshape(1, -1)
+            logger.info(f"Feature array shape: {features_np.shape}")
             
             # Ensure we have the expected number of features
             if features_np.shape[1] != len(self.feature_names):
-                return {
-                    "error": f"Feature mismatch: got {features_np.shape[1]} features, expected {len(self.feature_names)}"
-                }
+                error_msg = f"Feature mismatch: got {features_np.shape[1]} features, expected {len(self.feature_names)}"
+                logger.error(error_msg)
+                return {"error": error_msg}
             
             # Return features as a list (to match the API format)
             return {
@@ -224,7 +205,8 @@ class PredictionController:
                 "transaction_id": str(uuid.uuid4())
             }
         except Exception as e:
-            logger.error(f"Error transforming transaction: {str(e)}", exc_info=True)
+            stack_trace = traceback.format_exc()
+            logger.error(f"Error transforming transaction: {str(e)}\n{stack_trace}")
             return {"error": f"Failed to transform transaction: {str(e)}"}
     
     def process_transaction_pipeline(self, transaction_data: dict) -> dict:
