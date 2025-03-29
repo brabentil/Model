@@ -36,6 +36,12 @@ class DetailedPredictionResponse(BaseModel):
     model_version: Optional[str] = Field(None, description="Model version used")
     note: Optional[str] = Field(None, description="Additional information")
 
+class PredictedResponse(BaseModel):
+    """Response model for the prediction endpoint"""
+    fraud_prediction: str = Field(..., description="Whether transaction is predicted as fraud")
+    probability: float = Field(..., description="Probability of fraud (0-1)")
+
+
 class HealthResponse(BaseModel):
     """API health check response"""
     status: str

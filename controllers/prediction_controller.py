@@ -1,3 +1,4 @@
+from api.fallback import Transaction
 import numpy as np
 import pandas as pd
 import logging
@@ -13,6 +14,7 @@ from transaction_transformer import TransactionTransformer
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("prediction_controller")
+
 
 class PredictionController:
     """Controller for handling fraud predictions"""
@@ -52,45 +54,64 @@ class PredictionController:
             "environment": os.getenv("ENVIRONMENT", "development")
         }
     
-    def predict_from_features(self, features: List[float]) -> Dict[str, Any]:
+    def predict_from_features(self, transaction: Transaction) -> Dict[str, Any]:
         """Make prediction from pre-processed feature vector"""
         if self.model is None:
             return self._get_fallback_prediction()
             
         try:
-            # Validate feature count
-            if len(features) != 30:
-                logger.warning(f"Expected 30 features, got {len(features)}")
+            # print('Features:', features)
+            # # Validate feature count
+            # if len(features) != 30:
+            #     logger.warning(f"Expected 30 features, got {len(features)}")
+            #     return {
+            #         "error": f"Expected 30 features, got {len(features)}",
+            #         "prediction": self._get_fallback_prediction()["prediction"]
+            #     }
+            
+            # # Reshape for prediction and apply scaler if available
+            # features_array = np.array(features).reshape(1, -1)
+        
+            # if self.scaler:
+            #     features_df = pd.DataFrame(features_array, columns=self.feature_names)
+            #     features_scaled = self.scaler.transform(features_df)
+            # else:
+            #     features_scaled = features_array
+            
+            # # Make prediction
+            # prediction = bool(self.model.predict(features_scaled)[0] == 1)
+            # # Error from here
+            # probability = float(self.model.predict_proba(features_scaled)[0][1])
+            # risk_level = self._get_risk_level(probability)
+            data = pd.DataFrame([transaction])
+            print('Data:', data)
+            if len(data.columns) != 30:
+                logger.warning(f"Expected 30 features, got {data.columns}")
                 return {
-                    "error": f"Expected 30 features, got {len(features)}",
+                    "error": f"Expected 30 features, got  {data.columns}",
                     "prediction": self._get_fallback_prediction()["prediction"]
                 }
+            scaled_data = self.scaler.transform(data)
+            prediction = self.model.predict(scaled_data)
+            prediction_proba = self.model.predict_proba(scaled_data)
+            print('Prediction:', prediction)
+            print('Prediction Probability:', prediction_proba)
+
+            return {"fraud_prediction": "Fraud" if int(prediction[0]) == 1  else "Non-Fraud", "probability": float(prediction_proba[0][1])}
             
-            # Reshape for prediction and apply scaler if available
-            features_array = np.array(features).reshape(1, -1)
-            if self.scaler:
-                features_df = pd.DataFrame(features_array, columns=self.feature_names)
-                features_scaled = self.scaler.transform(features_df)
-            else:
-                features_scaled = features_array
-            
-            # Make prediction
-            prediction = bool(self.model.predict(features_scaled)[0] == 1)
-            probability = float(self.model.predict_proba(features_scaled)[0, 1])
-            risk_level = self._get_risk_level(probability)
-            
-            return {
-                "prediction": {
-                    "is_fraud": prediction,
-                    "fraud_probability": probability,
-                    "risk_level": risk_level
-                },
-                "processed_at": datetime.now().isoformat(),
-                "model_version": self.model_version,
-                "feature_importance": self._get_feature_importance(features_scaled)
-            }
+            # return {
+            #     "prediction": {
+            #         "is_fraud": prediction,
+            #         "fraud_probability": probability,
+            #         "risk_level": risk_level
+            #     },
+            #     "processed_at": datetime.now().isoformat(),
+            #     "model_version": self.model_version,
+            #     "feature_importance": self._get_feature_importance(features_scaled)
+            # }
             
         except Exception as e:
+            # Error from here
             logger.error(f"Error making prediction from features: {e}")
             return {
                 "error": str(e),
@@ -111,40 +132,52 @@ class PredictionController:
             logger.info(f"Processing transaction: {safe_transaction}")
             
             # Transform the transaction
-            features = self.transformer.transform_raw_transaction(transaction_data)
+            transaction = self.transformer.transform_raw_transaction(transaction_data)
+
+            result = PredictionController().predict_from_features(transaction=transaction)
+            # print the result
+            logger.info(f"Prediction result: {result}")
+            
+            # Modify this based on your model's output structure
+            return {
+                "fraud_prediction": result["fraud_prediction"] if isinstance(result, dict) else result,
+                "probability": result.get("probability") if isinstance(result, dict) else None
+            }
+
             
             # Convert features to the format expected by the model
-            features_np = np.array(features).reshape(1, -1)
+            # features_np = np.array(features).reshape(1, -1)
             
-            # Ensure we have the expected number of features
-            if features_np.shape[1] != len(self.feature_names):
-                return {
-                    "error": f"Feature mismatch: got {features_np.shape[1]} features, expected {len(self.feature_names)}"
-                }
+            # # Ensure we have the expected number of features
+            # if features_np.shape[1] != len(self.feature_names):
+            #     return {
+            #         "error": f"Feature mismatch: got {features_np.shape[1]} features, expected {len(self.feature_names)}"
+            #     }
                 
-            # Create DataFrame with feature names
-            features_df = pd.DataFrame(features_np, columns=self.feature_names)
+            # # Create DataFrame with feature names
+            # features_df = pd.DataFrame(features_np, columns=self.feature_names)
             
-            # Scale the features
-            features_scaled = self.scaler.transform(features_df)
+            # # Scale the features
+            # features_scaled = self.scaler.transform(features_df)
             
-            # Make prediction
-            prediction = int(self.model.predict(features_scaled)[0])
-            probability = float(self.model.predict_proba(features_scaled)[0, 1])
-            risk_level = self._get_risk_level(probability)
+            # # Make prediction
+            # prediction = int(self.model.predict(features_scaled)[0])
+            # probability = float(self.model.predict_proba(features_scaled)[0, 1])
+            # risk_level = self._get_risk_level(probability)
             
-            # Get feature importance information
-            top_features = self._get_feature_importance(features_np[0])
+            # # Get feature importance information
+            # top_features = self._get_feature_importance(features_np[0])
             
-            return {
-                "prediction": prediction,
-                "fraud_probability": probability,
-                "is_fraud": prediction == 1,
-                "risk_level": risk_level,
-                "top_features": top_features,
-                "transaction_id": str(uuid.uuid4()),
-                "timestamp": datetime.now().isoformat()
-            }
+            
+            # return {
+            #     "prediction": prediction,
+            #     "fraud_probability": probability,
+            #     "is_fraud": prediction == 1,
+            #     "risk_level": risk_level,
+            #     "top_features": top_features,
+            #     "transaction_id": str(uuid.uuid4()),
+            #     "timestamp": datetime.now().isoformat()
+            # }
         except Exception as e:
             logger.error(f"Error processing raw transaction: {str(e)}", exc_info=True)
             return {"error": f"Failed to process transaction: {str(e)}"}

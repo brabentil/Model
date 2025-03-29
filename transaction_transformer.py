@@ -93,6 +93,8 @@ class TransactionTransformer:
             **v_features_dict,
             "Amount": amount
         }
+
+        print(f"Transformed features: {output}")
         
         return output
     
