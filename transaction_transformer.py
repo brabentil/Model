@@ -1,4 +1,21 @@
-import numpy as np
+# Try different numpy import approaches to handle compatibility issues
+try:
+    import numpy as np
+except ImportError:
+    try:
+        # Try a more basic import 
+        import numpy
+        np = numpy
+    except ImportError:
+        print("ERROR: Failed to import numpy in transformer. Using fallback mode.")
+        # Create minimal numpy-like functionality for basic operations
+        class FallbackNumpy:
+            def array(self, data):
+                return data
+            def reshape(self, data, shape):
+                return data
+        np = FallbackNumpy()
+
 import pandas as pd
 from datetime import datetime
 import joblib

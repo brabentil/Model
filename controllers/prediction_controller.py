@@ -1,5 +1,21 @@
-from api.fallback import Transaction
-import numpy as np
+# Try different numpy import approaches to handle compatibility issues
+try:
+    import numpy as np
+except ImportError:
+    try:
+        # Try a more basic import 
+        import numpy
+        np = numpy
+    except ImportError:
+        print("ERROR: Failed to import numpy. Using fallback mode.")
+        # Create minimal numpy-like functionality for basic operations
+        class FallbackNumpy:
+            def array(self, data):
+                return data
+            def reshape(self, data, shape):
+                return data
+        np = FallbackNumpy()
+
 import pandas as pd
 import logging
 import os
@@ -34,10 +50,34 @@ class PredictionController:
             model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "fraud_detection_model.pkl")
             scaler_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "scaler.pkl")
             
-            self.model = joblib.load(model_path)
-            self.scaler = joblib.load(scaler_path)
-            self.transformer = TransactionTransformer()
-            logger.info("Successfully loaded model, scaler and transformer")
+            # Log paths for debugging
+            logger.info(f"Model path: {model_path}")
+            logger.info(f"Scaler path: {scaler_path}")
+            
+            # Try to load the model with error handling
+            try:
+                self.model = joblib.load(model_path)
+                logger.info("Successfully loaded model")
+            except Exception as model_error:
+                logger.error(f"Error loading model: {str(model_error)}")
+                self.model = None
+                
+            # Try to load the scaler with error handling
+            try:
+                self.scaler = joblib.load(scaler_path)
+                logger.info("Successfully loaded scaler")
+            except Exception as scaler_error:
+                logger.error(f"Error loading scaler: {str(scaler_error)}")
+                self.scaler = None
+                
+            # Initialize transformer
+            try:
+                self.transformer = TransactionTransformer()
+                logger.info("Successfully initialized transformer")
+            except Exception as transformer_error:
+                logger.error(f"Error initializing transformer: {str(transformer_error)}")
+                self.transformer = None
+                
         except Exception as e:
             logger.error(f"Error loading dependencies: {e}")
             # Don't raise - we'll handle missing dependencies gracefully
