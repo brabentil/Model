@@ -45,7 +45,7 @@ class TransactionTransformer:
                 - etc...
                 
         Returns:
-            np.array: Array of 30 features in the format expected by the model
+            dict: Dictionary with features in the format expected by the model
         """
         # Extract available data with validation
         try:
@@ -84,13 +84,17 @@ class TransactionTransformer:
             time_feature = time_feature
             amount_normalized = amount
             
-        # Generate synthetic V1-V28 features based on available transaction data
-        v_features = self._generate_v_features(transaction_data)
+        # Generate V1-V28 features
+        v_features_dict = self._generate_v_features(transaction_data)
         
-        # Combine all features
-        features = np.array([time_feature] + v_features + [amount_normalized], dtype=np.float64)
+        # Format the output as a dictionary matching the required structure
+        output = {
+            "Time": time_feature,
+            **v_features_dict,
+            "Amount": amount
+        }
         
-        return features
+        return output
     
     def get_accuracy_estimate(self):
         """
@@ -110,18 +114,11 @@ class TransactionTransformer:
     def _generate_v_features(self, transaction_data):
         """
         Generate approximate V1-V28 features based on transaction attributes.
-        This is a very simplified approach and would need refinement for production.
         
-        In a real system, you might:
-        1. Use domain knowledge to map transaction attributes to meaningful features
-        2. Train an autoencoder to generate V1-V28 like features
-        3. Use a subset of the most important V features based on your model
+        Returns:
+            dict: Dictionary with V1-V28 features
         """
-        # Start with zeros for V1-V28
-        v_features = [0.0] * 28
-        
         # Extract useful information that might correlate with fraud patterns
-        # Use more robust type checking and error handling
         try:
             amount = float(transaction_data.get('amount', 0))
         except (ValueError, TypeError):
@@ -138,41 +135,37 @@ class TransactionTransformer:
         merchant_name = str(transaction_data.get('merchant_name', ''))
         country = str(transaction_data.get('country', ''))
         
-        # Set some values based on transaction characteristics
+        # Initialize the V features dictionary
+        v_features = {}
+        
         # V1: Often correlates with transaction type
-        v_features[0] = -1.2 if is_online else 0.5
+        v_features["V1"] = -1.2 if is_online else 0.5
         
         # V2: Often correlates with amount
-        v_features[1] = -0.5 if amount > 200 else 0.3
+        v_features["V2"] = -0.5 if amount > 200 else 0.3
         
         # V3: Could relate to merchant category
         high_risk_categories = ['jewelry', 'electronics', 'travel', 'gambling', 'cryptocurrency']
-        if any(category in merchant_category.lower() for category in high_risk_categories):
-            v_features[2] = -0.7  # Higher risk categories
-        else:
-            v_features[2] = 0.2
-            
+        v_features["V3"] = -0.7 if any(category in merchant_category.lower() for category in high_risk_categories) else 0.2
+        
         # V4: Might indicate location anomalies
-        v_features[3] = -1.0 if unusual_location else 0.1
+        v_features["V4"] = -1.0 if unusual_location else 0.1
         
         # V5: Could relate to transaction frequency
-        v_features[4] = -0.8 if high_frequency else 0.2
+        v_features["V5"] = -0.8 if high_frequency else 0.2
         
         # V6: Card present vs not present
-        v_features[5] = 0.4 if card_present else -0.6
+        v_features["V6"] = 0.4 if card_present else -0.6
         
         # V7: Country risk factor
         high_risk_countries = ['NG', 'RO', 'RU', 'UA']
-        if country in high_risk_countries:
-            v_features[6] = -0.9
-        else:
-            v_features[6] = 0.3
+        v_features["V7"] = -0.9 if country in high_risk_countries else 0.3
         
         # For remaining features, we use small random values to approximate distribution
         # Using a fixed seed for consistency in predictions
         np.random.seed(hash(str(transaction_data)) % 2**32)
-        for i in range(7, 28):
-            v_features[i] = np.random.normal(0, 0.3)  # centered around 0 with small variance
-        
+        for i in range(8, 29):
+            v_features[f"V{i}"] = np.random.normal(0, 0.3)
+            
         return v_features
 

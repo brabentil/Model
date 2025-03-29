@@ -89,7 +89,7 @@ def try_endpoint(endpoint, data, max_retries=3, backoff_factor=1.5):
     return None
 
 # Try the raw prediction endpoint
-raw_result = try_endpoint("/predict/raw", raw_request_body)
+raw_result = try_endpoint("/raw", raw_request_body)
 
 if raw_result:
     logger.info(f"Raw prediction result: {json.dumps(raw_result, indent=2)}")

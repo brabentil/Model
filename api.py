@@ -30,6 +30,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize TransactionTransformer
+transformer = TransactionTransformer()
+
 # Define data models
 class RawTransactionData(BaseModel):
     amount: float
@@ -42,6 +45,8 @@ class RawTransactionData(BaseModel):
     unusual_location: Optional[bool] = False
     high_frequency: Optional[bool] = False
     # Add any other raw transaction fields you might have
+    class Config:
+        extra = "allow"  # Allow additional fields not specified in the model
 
 class TransactionData(BaseModel):
     features: List[float]
@@ -102,40 +107,103 @@ async def predict(data: TransactionData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
-@app.post("/raw")
+@app.post("/predict/raw")
 async def predict_raw_transaction(transaction: RawTransactionData):
     """
-    Endpoint that accepts raw transaction data and transforms it
-    into the format expected by the model
-    """
-    if model is None or scaler is None or transformer is None:
-        # Log the issue
-        logger.error("Model components not loaded: predict/raw endpoint unavailable")
-        raise HTTPException(status_code=503, detail="Model, scaler or transformer not loaded")
+    Predict fraud probability based on raw transaction data
     
+    This endpoint accepts raw transaction details, transforms them to the required feature format,
+    and returns a fraud prediction.
+    """
     try:
-        # Log incoming request for debugging
-        logger.info(f"Received raw transaction request: {transaction}")
+        logging.info(f"Received raw transaction: {transaction.dict()}")
         
-        # Convert transaction to dictionary
-        transaction_dict = transaction.dict()
+        # Transform raw transaction into model-compatible features
+        transformed_data = transformer.transform_raw_transaction(transaction.dict())
+        logging.info(f"Transformed data: {transformed_data}")
         
-        # Transform raw transaction into features
-        features = transformer.transform_raw_transaction(transaction_dict)
+        # Convert the dictionary to the format expected by the model
+        features_array = np.array([
+            transformed_data["Time"],
+            transformed_data["V1"],
+            transformed_data["V2"],
+            transformed_data["V3"],
+            transformed_data["V4"],
+            transformed_data["V5"],
+            transformed_data["V6"],
+            transformed_data["V7"],
+            transformed_data["V8"],
+            transformed_data["V9"],
+            transformed_data["V10"],
+            transformed_data["V11"],
+            transformed_data["V12"],
+            transformed_data["V13"],
+            transformed_data["V14"],
+            transformed_data["V15"],
+            transformed_data["V16"],
+            transformed_data["V17"],
+            transformed_data["V18"],
+            transformed_data["V19"],
+            transformed_data["V20"],
+            transformed_data["V21"],
+            transformed_data["V22"],
+            transformed_data["V23"],
+            transformed_data["V24"],
+            transformed_data["V25"],
+            transformed_data["V26"],
+            transformed_data["V27"],
+            transformed_data["V28"],
+            transformed_data["Amount"]
+        ]).reshape(1, -1)
         
-        # Log transformed features
-        logger.info(f"Transformed features shape: {features.shape}")
+        # Apply scaler if available
+        if 'scaler' in globals() and scaler is not None:
+            features_array = scaler.transform(features_array)
         
-        # Ensure features has the correct shape
-        if features.size != len(feature_names):
-            raise ValueError(f"Generated {features.size} features, expected {len(feature_names)}")
+        # Make prediction
+        fraud_probability = float(model.predict_proba(features_array)[0, 1])
+        is_fraud = bool(fraud_probability > 0.5)
         
-        # Create a TransactionData object to reuse the predict endpoint logic
-        transaction_data = TransactionData(features=features.tolist())
-        
-        # Call the predict endpoint
-        return await predict(transaction_data)
+        # Return prediction result
+        return {
+            "prediction": {
+                "is_fraud": is_fraud,
+                "fraud_probability": fraud_probability,
+                "risk_level": get_risk_level(fraud_probability)
+            },
+            "transaction_id": transaction.dict().get("transaction_id", "unknown"),
+            "processed_at": pd.Timestamp.now().isoformat(),
+            "feature_importance": get_top_features_for_prediction(features_array)
+        }
         
     except Exception as e:
-        logger.error(f"Error processing raw transaction: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Raw prediction error: {str(e)}")
+        logging.error(f"Error predicting: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+
+def get_risk_level(probability):
+    """Calculate risk level based on fraud probability"""
+    if probability < 0.3:
+        return "low"
+    elif probability < 0.7:
+        return "medium"
+    else:
+        return "high"
+
+def get_top_features_for_prediction(features_array):
+    """Get top contributing features for this prediction"""
+    # This is a simplified example - you would need to implement
+    # feature importance calculation based on your model
+    feature_names = ["Time", "V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", 
+                     "V9", "V10", "V11", "V12", "V13", "V14", "V15", "V16", 
+                     "V17", "V18", "V19", "V20", "V21", "V22", "V23", "V24", 
+                     "V25", "V26", "V27", "V28", "Amount"]
+    
+    # Placeholder for feature importance - this should be adapted to your model
+    # For example, for tree-based models you might use model.feature_importances_
+    return [
+        {"feature": "V14", "importance": 0.25},
+        {"feature": "V12", "importance": 0.18},
+        {"feature": "V10", "importance": 0.15},
+        {"feature": "Amount", "importance": 0.12},
+        {"feature": "V17", "importance": 0.10}
+    ]
