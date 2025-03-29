@@ -168,21 +168,51 @@ class PredictionController:
             logger.info(f"Processing transaction: {safe_transaction}")
             
             # Transform the transaction
-            transaction = self.transformer.transform_raw_transaction(transaction_data)
-
-            # Fix: Pass the transaction as a positional argument, not as a keyword argument
-            result = PredictionController().predict_from_features(transaction)
-            # print the result
+            transformed_features = self.transformer.transform_raw_transaction(transaction_data)
+            logger.info(f"Transformed features: {transformed_features}")
+            
+            # Extract features in the correct format
+            if isinstance(transformed_features, dict):
+                # If it's a dictionary, extract features in correct order
+                features = [
+                    transformed_features.get("Time", 0),
+                    *[transformed_features.get(f"V{i}", 0) for i in range(1, 29)],
+                    transformed_features.get("Amount", 0)
+                ]
+            else:
+                # If it's already a list or array, use it directly
+                features = transformed_features
+                
+            # Make prediction using the current instance
+            result = self.predict_from_features(features)
             logger.info(f"Prediction result: {result}")
             
-            # Modify this based on your model's output structure
-            return {
-                "fraud_prediction": result["fraud_prediction"] if isinstance(result, dict) else result,
-                "probability": result.get("probability") if isinstance(result, dict) else None
-            }
+            # Format the response
+            if "error" in result:
+                return result
+                
+            if "prediction" in result:
+                prediction_data = result["prediction"]
+                return {
+                    "prediction": {
+                        "is_fraud": prediction_data.get("is_fraud", False),
+                        "fraud_probability": prediction_data.get("fraud_probability", 0),
+                        "risk_level": prediction_data.get("risk_level", "low")
+                    },
+                    "processed_at": result.get("processed_at", datetime.now().isoformat()),
+                    "model_version": result.get("model_version", self.model_version),
+                    "feature_importance": result.get("feature_importance", []),
+                    "transaction_id": str(uuid.uuid4())
+                }
+            else:
+                return {
+                    "error": "Unexpected prediction result format",
+                    "prediction": self._get_fallback_prediction()["prediction"]
+                }
             
         except Exception as e:
-            logger.error(f"Error processing raw transaction: {str(e)}", exc_info=True)
+            stack_trace = traceback.format_exc()
+            logger.error(f"Error processing raw transaction: {str(e)}\n{stack_trace}")
             return {"error": f"Failed to process transaction: {str(e)}"}
     
     def transform_raw_transaction(self, transaction_data: dict) -> dict:

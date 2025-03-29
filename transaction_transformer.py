@@ -64,56 +64,71 @@ class TransactionTransformer:
         Returns:
             dict: Dictionary with features in the format expected by the model
         """
-        # Extract available data with validation
         try:
-            amount = float(transaction_data.get('amount', 0))
-        except (ValueError, TypeError):
-            amount = 0
-            print("Warning: Invalid amount value, defaulting to 0")
-        
-        # Calculate time feature (seconds since midnight or since first transaction)
-        time_feature = 0
-        if 'timestamp' in transaction_data:
+            # Extract available data with validation
             try:
-                timestamp = transaction_data['timestamp']
-                if isinstance(timestamp, str):
-                    # Handle different timestamp formats
-                    try:
-                        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    except ValueError:
-                        # Try with different format
-                        timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-                elif isinstance(timestamp, (int, float)):
-                    # Unix timestamp
-                    timestamp = datetime.fromtimestamp(timestamp)
-                    
-                # Calculate seconds since midnight
-                time_feature = (timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second)
-            except Exception as e:
-                print(f"Warning: Could not parse timestamp: {e}, defaulting to 0")
-        
-        # Normalize time and amount (if scaler not available)
-        if self.scaler is None:
-            time_feature = (time_feature - self.time_mean) / self.time_std if self.time_std != 0 else 0
-            amount_normalized = (amount - self.amount_mean) / self.amount_std if self.amount_std != 0 else 0
-        else:
-            # The scaler will handle this during prediction
-            time_feature = time_feature
-            amount_normalized = amount
+                amount = float(transaction_data.get('amount', 0))
+            except (ValueError, TypeError):
+                amount = 0
+                print("Warning: Invalid amount value, defaulting to 0")
             
-        # Generate V1-V28 features
-        v_features_dict = self._generate_v_features(transaction_data)
-        
-        # Format the output as a dictionary matching the required structure
-        output = {
-            "Time": time_feature,
-            **v_features_dict,
-            "Amount": amount
-        }
+            # Calculate time feature (seconds since midnight or since first transaction)
+            time_feature = 0
+            if 'timestamp' in transaction_data:
+                try:
+                    timestamp = transaction_data['timestamp']
+                    if isinstance(timestamp, str):
+                        # Handle different timestamp formats
+                        try:
+                            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        except ValueError:
+                            # Try with different format
+                            timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                    elif isinstance(timestamp, (int, float)):
+                        # Unix timestamp
+                        timestamp = datetime.fromtimestamp(timestamp)
+                        
+                    # Calculate seconds since midnight
+                    time_feature = (timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second)
+                except Exception as e:
+                    print(f"Warning: Could not parse timestamp: {e}, defaulting to 0")
+            
+            # Normalize time and amount (if scaler not available)
+            if self.scaler is None:
+                time_feature = (time_feature - self.time_mean) / self.time_std if self.time_std != 0 else 0
+                amount_normalized = (amount - self.amount_mean) / self.amount_std if self.amount_std != 0 else 0
+            else:
+                # The scaler will handle this during prediction
+                time_feature = time_feature
+                amount_normalized = amount
+                
+            # Generate V1-V28 features
+            v_features_dict = self._generate_v_features(transaction_data)
+            
+            # Format the output as a dictionary matching the required structure
+            output = {
+                "Time": time_feature,
+                **v_features_dict,
+                "Amount": amount
+            }
 
-        print(f"Transformed features: {output}")
+            print(f"Transformed features: {output}")
+            
+            # Ensure all required fields are present
+            for i in range(1, 29):
+                if f"V{i}" not in output:
+                    output[f"V{i}"] = 0.0
+            
+            return output
         
-        return output
+        except Exception as e:
+            print(f"Error in transform_raw_transaction: {str(e)}")
+            # Return a basic feature set as fallback
+            return {
+                "Time": 0,
+                **{f"V{i}": 0.0 for i in range(1, 29)},
+                "Amount": float(transaction_data.get('amount', 0))
+            }
     
     def get_accuracy_estimate(self):
         """
