@@ -8,8 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Base URL - change this to match your deployment
-BASE_URL = "http://localhost:8000"  # Local development
-# BASE_URL = "https://model-91mn.onrender.com"  # Render deployment
+BASE_URL = "https://model-91mn.onrender.com"  # Render deployment
 
 def test_health():
     """Test the health endpoint"""
