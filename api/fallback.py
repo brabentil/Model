@@ -32,6 +32,35 @@ app = FastAPI(title="Fallback Credit Card Fraud API")
 class PredictionInput(BaseModel):
     features: List[float]
 
+class Transaction(BaseModel):
+    Time: float
+    V1: float
+    V2: float
+    V3: float
+    V4: float
+    V5: float
+    V6: float
+    V7: float
+    V8: float
+    V9: float
+    V10: float
+    V11: float
+    V12: float
+    V13: float
+    V14: float
+    V15: float
+    V16: float
+    V17: float
+    V18: float
+    V19: float
+    V20: float
+    V21: float
+    V22: float
+    V23: float
+    V24: float
+    V25: float
+    Amount: float
+
 class RawTransactionInput(BaseModel):
     """Simple model for raw transaction data"""
     card_number: str = None
