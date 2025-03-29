@@ -94,7 +94,7 @@ async def predict(data: TransactionData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
-@app.post("/predict/raw", tags=["prediction"])
+@app.post("/predict/raw")
 async def predict_raw_transaction(transaction: RawTransactionData):
     """
     Endpoint that accepts raw transaction data and transforms it
@@ -104,37 +104,34 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         raise HTTPException(status_code=500, detail="Model, scaler or transformer not loaded")
     
     try:
+        # Log incoming request for debugging
+        print(f"Received raw transaction request: {transaction}")
+        
         # Convert transaction to dictionary
         transaction_dict = transaction.dict()
         
         # Transform raw transaction into features
         features = transformer.transform_raw_transaction(transaction_dict)
         
+        # Log transformed features
+        print(f"Transformed features shape: {features.shape}")
+        
         # Ensure features has the correct shape
         if features.size != len(feature_names):
             raise ValueError(f"Generated {features.size} features, expected {len(feature_names)}")
         
-        # Reshape for prediction
-        features = features.reshape(1, -1)
+        # Create a TransactionData object to reuse the predict endpoint logic
+        transaction_data = TransactionData(features=features.tolist())
         
-        # Convert to DataFrame with feature names to avoid the warning
-        features_df = pd.DataFrame(features, columns=feature_names)
-        
-        # Scale features
-        features_scaled = scaler.transform(features_df)
-        
-        # Make prediction
-        prediction = model.predict(features_scaled)
-        prediction_proba = model.predict_proba(features_scaled)[:, 1]
+        # Call the predict function directly to avoid duplication
+        prediction_result = await predict(transaction_data)
         
         # Get accuracy estimate
         accuracy_info = transformer.get_accuracy_estimate()
         
-        # Create response with detailed information
-        response = {
-            "prediction": int(prediction[0]),
-            "fraud_probability": float(prediction_proba[0]),
-            "is_fraud": bool(prediction[0] == 1),
+        # Enhance the prediction result with transaction-specific information
+        enhanced_result = {
+            **prediction_result,
             "transaction_amount": transaction.amount,
             "merchant": transaction.merchant_name,
             "accuracy_info": accuracy_info,
@@ -148,11 +145,11 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         
         # Add optional fields if they exist
         if transaction.merchant_category:
-            response["transaction_details"]["merchant_category"] = transaction.merchant_category
+            enhanced_result["transaction_details"]["merchant_category"] = transaction.merchant_category
         if transaction.country:
-            response["transaction_details"]["country"] = transaction.country
+            enhanced_result["transaction_details"]["country"] = transaction.country
             
-        return response
+        return enhanced_result
     
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid input data: {str(e)}")
@@ -162,14 +159,3 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         print(f"Error in predict_raw_transaction: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
-
-# Add this debugging code at the end of the file
-if __name__ == "__main__":
-    import uvicorn
-    
-    # Print all registered routes for debugging
-    for route in app.routes:
-        print(f"Route: {route.path}, methods: {route.methods}")
-    
-    # Run the app with uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
