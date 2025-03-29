@@ -1,11 +1,20 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import sys
+import os
+from typing import Dict, Any, List
 import numpy as np
 import joblib
-import os
-from typing import List
-import sys
 import logging
+
+# Add the parent directory to path so we can import from the Model directory
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import your model components - you'll need to adjust these imports based on your actual model structure
+try:
+    from model import predict  # Adjust this import based on your actual model structure
+except ImportError:
+    print("Warning: Could not import model module. Make sure your model is properly configured.")
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +25,7 @@ logger.info(f"Python version: {sys.version}")
 logger.info(f"Python path: {sys.executable}")
 
 # Initialize FastAPI app
-app = FastAPI(title="Credit Card Fraud Detection API")
+app = FastAPI(title="Aegis Model API")
 
 # Define paths
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "fraud_detection_model.pkl")
@@ -56,13 +65,30 @@ except Exception as e:
     logger.error(f"Error loading model: {e}")
     model = None
 
-# Define request data model
-class TransactionData(BaseModel):
-    features: List[float]
+class PredictionInput(BaseModel):
+    features: Dict[str, Any]
+
+class PredictionOutput(BaseModel):
+    prediction: Any
+    confidence: float = None
 
 @app.get("/")
 def read_root():
-    return {"message": "Credit Card Fraud Detection API is running!"}
+    return {"status": "API is running", "model": "Aegis Model"}
+
+@app.post("/predict", response_model=PredictionOutput)
+async def make_prediction(input_data: PredictionInput):
+    try:
+        # Adjust this based on your model's prediction function
+        result = predict(input_data.features)
+        
+        # Modify this based on your model's output structure
+        return {
+            "prediction": result["prediction"] if isinstance(result, dict) else result,
+            "confidence": result.get("confidence") if isinstance(result, dict) else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
 @app.get("/health")
 def health_check():
@@ -73,44 +99,3 @@ def health_check():
         "pandas_available": PANDAS_AVAILABLE,
         "python_version": sys.version
     }
-
-@app.post("/predict")
-async def predict(data: TransactionData):
-    if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded")
-    
-    try:
-        # Convert features to numpy array
-        features = np.array(data.features).reshape(1, -1)
-        
-        # Check dimensions
-        if features.shape[1] != 30:  # Assuming 30 features
-            raise HTTPException(status_code=400, detail=f"Expected 30 features, got {features.shape[1]}")
-        
-        # Use pandas if available for feature names
-        if PANDAS_AVAILABLE:
-            features_df = pd.DataFrame(features, columns=feature_names)
-            
-            # Scale features if scaler is available
-            if scaler is not None:
-                features_to_predict = scaler.transform(features_df)
-            else:
-                logger.warning("Using unscaled features as scaler is not available")
-                features_to_predict = features_df
-        else:
-            # Fallback if pandas is not available
-            logger.warning("Using raw numpy arrays as pandas is not available")
-            features_to_predict = features if scaler is None else scaler.transform(features)
-        
-        # Make prediction
-        prediction = model.predict(features_to_predict)[0]
-        probability = model.predict_proba(features_to_predict)[0][1]
-        
-        return {
-            "prediction": int(prediction),
-            "fraud_probability": float(probability),
-            "is_fraud": bool(prediction == 1)
-        }
-    except Exception as e:
-        logger.error(f"Error during prediction: {e}")
-        raise HTTPException(status_code=500, detail=f"Error making prediction: {str(e)}")
