@@ -3,6 +3,7 @@ import pandas as pd
 import logging
 import os
 import joblib
+import uuid
 from datetime import datetime
 from typing import Dict, List, Tuple, Any, Optional
 
@@ -187,6 +188,87 @@ class PredictionController:
         except Exception as e:
             logger.error(f"Error processing raw transaction: {str(e)}", exc_info=True)
             return {"error": f"Failed to process transaction: {str(e)}"}
+    
+    def transform_raw_transaction(self, transaction_data: dict) -> dict:
+        """
+        Transform raw transaction data into feature vector without making predictions
+        
+        Args:
+            transaction_data: Dictionary containing raw transaction fields
+            
+        Returns:
+            Dictionary with transformed features that can be passed to predict endpoint
+        """
+        try:
+            # Ensure transformer is available
+            if self.transformer is None:
+                self.transformer = TransactionTransformer()
+                
+            # Transform raw transaction into features
+            features = self.transformer.transform_raw_transaction(transaction_data)
+            
+            # Convert features to the format expected by the model
+            features_np = np.array(features).reshape(1, -1)
+            
+            # Ensure we have the expected number of features
+            if features_np.shape[1] != len(self.feature_names):
+                return {
+                    "error": f"Feature mismatch: got {features_np.shape[1]} features, expected {len(self.feature_names)}"
+                }
+            
+            # Return features as a list (to match the API format)
+            return {
+                "features": features_np[0].tolist(),
+                "feature_names": self.feature_names,
+                "timestamp": datetime.now().isoformat(),
+                "transaction_id": str(uuid.uuid4())
+            }
+        except Exception as e:
+            logger.error(f"Error transforming transaction: {str(e)}", exc_info=True)
+            return {"error": f"Failed to transform transaction: {str(e)}"}
+    
+    def process_transaction_pipeline(self, transaction_data: dict) -> dict:
+        """
+        Process raw transaction through complete pipeline - transform and predict in one step
+        
+        Args:
+            transaction_data: Dictionary containing raw transaction fields
+            
+        Returns:
+            Dictionary with prediction results
+        """
+        try:
+            # Step 1: Transform raw transaction to features
+            transform_result = self.transform_raw_transaction(transaction_data)
+            
+            # Check for errors in transformation
+            if "error" in transform_result:
+                logger.error(f"Error in transformation step: {transform_result['error']}")
+                return transform_result
+            
+            # Step 2: Make prediction from features
+            features = transform_result["features"]
+            transaction_id = transform_result["transaction_id"]
+            
+            # Get prediction
+            prediction_result = self.predict_from_features(features)
+            
+            # Check for errors in prediction
+            if "error" in prediction_result:
+                logger.error(f"Error in prediction step: {prediction_result['error']}")
+                return prediction_result
+                
+            # Add transaction ID to the result
+            prediction_result["transaction_id"] = transaction_id
+            
+            # Add transformed feature names for reference
+            prediction_result["feature_names"] = transform_result["feature_names"]
+            
+            return prediction_result
+            
+        except Exception as e:
+            logger.error(f"Error in transaction pipeline: {str(e)}", exc_info=True)
+            return {"error": f"Pipeline processing failed: {str(e)}"}
     
     def _get_risk_level(self, probability: float) -> str:
         """Determine risk level from probability"""

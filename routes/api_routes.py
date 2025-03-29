@@ -10,7 +10,8 @@ from models.data_models import (
     PredictionResponse, 
     DetailedPredictionResponse,
     HealthResponse,
-    TestResponse
+    TestResponse,
+    TransformResponse
 )
 from controllers.prediction_controller import PredictionController
 
@@ -64,6 +65,38 @@ async def predict_raw(request: RawTransactionRequest, controller: PredictionCont
     except Exception as e:
         logger.error(f"Error in /raw endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Raw prediction error: {str(e)}")
+
+@router.post("/transform", response_model=TransformResponse)
+async def transform_transaction(request: RawTransactionRequest, controller: PredictionController = Depends(get_controller)):
+    """Transform raw transaction data into feature vector without making predictions"""
+    try:
+        logger.info(f"Processing transformation request")
+        result = controller.transform_raw_transaction(request.dict())
+        
+        if "error" in result:
+            logger.error(f"Error in transformation: {result['error']}")
+            return JSONResponse(status_code=400, content=result)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error in /transform endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Transformation error: {str(e)}")
+
+@router.post("/pipeline", response_model=DetailedPredictionResponse)
+async def pipeline(request: RawTransactionRequest, controller: PredictionController = Depends(get_controller)):
+    """Process raw transaction through full pipeline - transform and predict in one step"""
+    try:
+        logger.info(f"Processing transaction through full pipeline")
+        result = controller.process_transaction_pipeline(request.dict())
+        
+        if "error" in result:
+            logger.error(f"Error in pipeline processing: {result['error']}")
+            return JSONResponse(status_code=400, content=result)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error in /pipeline endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Pipeline processing error: {str(e)}")
 
 @router.post("/test", response_model=TestResponse)
 async def test_endpoint():
