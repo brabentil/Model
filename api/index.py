@@ -4,6 +4,7 @@ import numpy as np
 import joblib
 import os
 from typing import List
+import pandas as pd  # Add pandas import
 
 # Initialize FastAPI app
 app = FastAPI(title="Credit Card Fraud Detection API")
@@ -14,9 +15,12 @@ MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "
 try:
     model = joblib.load(MODEL_PATH)
     print(f"Model loaded successfully from {MODEL_PATH}")
+    # Define feature names that match what was used during training
+    feature_names = ['Time'] + [f'V{i}' for i in range(1, 29)] + ['Amount']
 except Exception as e:
     print(f"Error loading model: {e}")
     model = None
+    feature_names = None
 
 # Define request data model
 class TransactionData(BaseModel):
@@ -42,8 +46,11 @@ async def predict(data: TransactionData):
     
     # Make prediction
     try:
-        prediction = model.predict(features)[0]
-        probability = model.predict_proba(features)[0][1]
+        # Convert to DataFrame with feature names to avoid the warning
+        features_df = pd.DataFrame(features, columns=feature_names)
+        
+        prediction = model.predict(features_df)[0]
+        probability = model.predict_proba(features_df)[0][1]
         
         return {
             "prediction": int(prediction),

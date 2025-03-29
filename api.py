@@ -6,6 +6,7 @@ import joblib
 import os
 from typing import List, Dict, Any, Optional
 from transaction_transformer import TransactionTransformer
+import pandas as pd
 
 # Initialize FastAPI app
 app = FastAPI(title="Credit Card Fraud Detection API", 
@@ -40,7 +41,7 @@ class TransactionData(BaseModel):
 # Load model and scaler on startup
 @app.on_event("startup")
 async def load_model():
-    global model, scaler, transformer
+    global model, scaler, transformer, feature_names
     model_path = os.path.join(os.path.dirname(__file__), "model", "fraud_detection_model.pkl")
     scaler_path = os.path.join(os.path.dirname(__file__), "model", "scaler.pkl")
     
@@ -48,11 +49,14 @@ async def load_model():
         model = joblib.load(model_path)
         scaler = joblib.load(scaler_path)
         transformer = TransactionTransformer()
+        # Define feature names that match what was used during training
+        feature_names = ['Time'] + [f'V{i}' for i in range(1, 29)] + ['Amount']
     except Exception as e:
         print(f"Error loading model or scaler: {str(e)}")
         model = None
         scaler = None
         transformer = None
+        feature_names = None
 
 @app.get("/")
 async def root():
@@ -71,8 +75,11 @@ async def predict(data: TransactionData):
         if features.shape[1] != 30:  # Assuming 30 features (Time + V1-V28 + Amount)
             return {"error": f"Expected 30 features, got {features.shape[1]}"}
         
+        # Convert to DataFrame with feature names to avoid the warning
+        features_df = pd.DataFrame(features, columns=feature_names)
+        
         # Scale features
-        features_scaled = scaler.transform(features)
+        features_scaled = scaler.transform(features_df)
         
         # Make prediction
         prediction = model.predict(features_scaled)
@@ -106,8 +113,11 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         # Reshape for prediction
         features = features.reshape(1, -1)
         
+        # Convert to DataFrame with feature names to avoid the warning
+        features_df = pd.DataFrame(features, columns=feature_names)
+        
         # Scale features
-        features_scaled = scaler.transform(features)
+        features_scaled = scaler.transform(features_df)
         
         # Make prediction
         prediction = model.predict(features_scaled)

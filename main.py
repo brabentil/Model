@@ -218,22 +218,19 @@ def main():
     joblib.dump(scaler, os.path.join(model_dir, 'scaler.pkl'))
     print(f"Model and scaler saved to: {model_dir}")
     
-    sample_data = np.array([
+    # Create sample data with the same feature names as in the training data
+    feature_names = X_train.columns.tolist()
+    sample_data = pd.DataFrame([
         [0.0,     # Time feature
         -1.2, 1.3, 0.8, -0.5, 1.7, 0.2, 0.6, -0.9, 0.1, 0.4,  # V1-V10 
         -1.0, 0.3, 0.7, -0.2, 1.5, -0.4, 0.1, -0.3, -1.2, 0.6,  # V11-V20
         0.2, 0.7, 0.9, -0.6, -0.3, -0.1, -0.05, -0.02,  # V21-V28
         200.0    # Amount feature
-        ]])
+        ]], columns=feature_names)
     
     # Check dimensions to ensure proper input formatting
     print(f"Sample data shape: {sample_data.shape}")
     print(f"Expected feature count: {X_train.shape[1]}")
-    
-    # No need for padding now as dimensions should match
-    if sample_data.shape[1] != X_train.shape[1]:
-        print(f"Warning: Sample data has {sample_data.shape[1]} features but model expects {X_train.shape[1]}")
-        sample_data = np.pad(sample_data, ((0, 0), (0, X_train.shape[1] - sample_data.shape[1])), 'constant')
     
     predict_sample(final_model, scaler, sample_data)
     
