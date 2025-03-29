@@ -52,12 +52,17 @@ async def predict(request: FeatureVectorRequest, controller: PredictionControlle
 async def predict_raw(request: RawTransactionRequest, controller: PredictionController = Depends(get_controller)):
     """Make prediction from raw transaction data"""
     try:
+        logger.info(f"Processing raw transaction request: {request}")
         result = controller.predict_from_raw_transaction(request.dict())
+        logger.info(f"Raw prediction result: {result}")
+        
         if "error" in result:
+            logger.error(f"Error in raw prediction: {result['error']}")
             return JSONResponse(status_code=400, content=result)
+        
         return result
     except Exception as e:
-        logger.error(f"Error in /raw: {str(e)}")
+        logger.error(f"Error in /raw endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Raw prediction error: {str(e)}")
 
 @router.post("/test", response_model=TestResponse)

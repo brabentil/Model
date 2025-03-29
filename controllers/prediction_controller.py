@@ -138,6 +138,56 @@ class PredictionController:
                 "note": "Error processing raw transaction, using fallback"
             }
     
+    def predict_from_raw_transaction(self, transaction_data: dict) -> dict:
+        """
+        Process raw transaction data and return prediction results
+        
+        Args:
+            transaction_data: Dictionary containing raw transaction fields
+            
+        Returns:
+            Dictionary with prediction results
+        """
+        try:
+            # Use the transformer to convert raw transaction data to features
+            features = self.transformer.transform_raw_transaction(transaction_data)
+            
+            # Convert features to the format expected by the model
+            features_np = np.array(features).reshape(1, -1)
+            
+            # Ensure we have the expected number of features
+            if features_np.shape[1] != len(self.feature_names):
+                return {
+                    "error": f"Feature mismatch: got {features_np.shape[1]} features, expected {len(self.feature_names)}"
+                }
+                
+            # Create DataFrame with feature names
+            features_df = pd.DataFrame(features_np, columns=self.feature_names)
+            
+            # Scale the features
+            features_scaled = self.scaler.transform(features_df)
+            
+            # Make prediction
+            prediction = int(self.model.predict(features_scaled)[0])
+            probability = float(self.model.predict_proba(features_scaled)[0, 1])
+            risk_level = self.get_risk_level(probability)
+            
+            # Get feature importance information
+            top_features = self.get_top_contributing_features(features_np[0])
+            
+            return {
+                "prediction": prediction,
+                "fraud_probability": probability,
+                "is_fraud": prediction == 1,
+                "risk_level": risk_level,
+                "top_features": top_features,
+                "transaction_id": str(uuid.uuid4()),
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error processing raw transaction: {str(e)}", exc_info=True)
+            return {"error": f"Failed to process transaction: {str(e)}"}
+    
     def _get_risk_level(self, probability: float) -> str:
         """Determine risk level from probability"""
         if probability < 0.3:

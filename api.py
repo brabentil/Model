@@ -113,47 +113,8 @@ async def predict(data: TransactionData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
-@app.post("/raw")
-async def predict_raw_transaction(transaction: RawTransactionData):
-    """
-    Endpoint that accepts raw transaction data and transforms it
-    into the format expected by the model
-    """
-    if model is None or scaler is None or transformer is None:
-        # Log the issue
-        logger.error("Model components not loaded: predict/raw endpoint unavailable")
-        raise HTTPException(status_code=503, detail="Model, scaler or transformer not loaded")
-    try:
-        # Log incoming request for debugging
-        logger.info(f"Received raw transaction request: {transaction}")
-        # Convert transaction to dictionary
-        transaction_dict = transaction.dict()
-        # Transform raw transaction into features
-        features = transformer.transform_raw_transaction(transaction_dict)
-        # Log transformed features
-        logger.info(f"Transformed features shape: {features.shape}")
-        # Ensure features has the correct shape
-        if features.size != len(feature_names):
-            raise ValueError(f"Generated {features.size} features, expected {len(feature_names)}")
-        
-        # Convert features to numpy array and reshape for prediction
-        features_np = np.array(features).reshape(1, -1)
-        # Convert to DataFrame with feature names to avoid the warning
-        features_df = pd.DataFrame(features_np, columns=feature_names)
-        # Scale features
-        features_scaled = scaler.transform(features_df)
-        # Make prediction
-        prediction = model.predict(features_scaled)
-        prediction_proba = model.predict_proba(features_scaled)[:, 1]
-        
-        return {
-            "prediction": int(prediction[0]),
-            "fraud_probability": float(prediction_proba[0]),
-            "is_fraud": bool(prediction[0] == 1)
-        }
-    except Exception as e:
-        logger.error(f"Error in raw transaction prediction: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+# Note: The /raw endpoint is now defined in routes/api_routes.py
+# The duplicate endpoint has been removed to prevent conflicts
 
 def get_risk_level(probability):
     """Calculate risk level based on fraud probability"""
