@@ -110,6 +110,10 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         # Transform raw transaction into features
         features = transformer.transform_raw_transaction(transaction_dict)
         
+        # Ensure features has the correct shape
+        if features.size != len(feature_names):
+            raise ValueError(f"Generated {features.size} features, expected {len(feature_names)}")
+        
         # Reshape for prediction
         features = features.reshape(1, -1)
         
@@ -126,15 +130,35 @@ async def predict_raw_transaction(transaction: RawTransactionData):
         # Get accuracy estimate
         accuracy_info = transformer.get_accuracy_estimate()
         
-        return {
+        # Create response with detailed information
+        response = {
             "prediction": int(prediction[0]),
             "fraud_probability": float(prediction_proba[0]),
             "is_fraud": bool(prediction[0] == 1),
             "transaction_amount": transaction.amount,
             "merchant": transaction.merchant_name,
             "accuracy_info": accuracy_info,
-            "warning": "This prediction is based on transformed data and may have reduced accuracy"
+            "warning": "This prediction is based on transformed data and may have reduced accuracy",
+            "transaction_details": {
+                "timestamp": transaction.timestamp,
+                "is_online": transaction.is_online,
+                "card_present": transaction.card_present
+            }
         }
+        
+        # Add optional fields if they exist
+        if transaction.merchant_category:
+            response["transaction_details"]["merchant_category"] = transaction.merchant_category
+        if transaction.country:
+            response["transaction_details"]["country"] = transaction.country
+            
+        return response
     
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid input data: {str(e)}")
     except Exception as e:
+        # Log the full error for debugging
+        import traceback
+        print(f"Error in predict_raw_transaction: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")

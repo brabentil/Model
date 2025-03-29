@@ -47,36 +47,48 @@ class TransactionTransformer:
         Returns:
             np.array: Array of 30 features in the format expected by the model
         """
-        # Extract available data
-        amount = transaction_data.get('amount', 0)
+        # Extract available data with validation
+        try:
+            amount = float(transaction_data.get('amount', 0))
+        except (ValueError, TypeError):
+            amount = 0
+            print("Warning: Invalid amount value, defaulting to 0")
         
         # Calculate time feature (seconds since midnight or since first transaction)
+        time_feature = 0
         if 'timestamp' in transaction_data:
             try:
                 timestamp = transaction_data['timestamp']
                 if isinstance(timestamp, str):
-                    timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                time_feature = timestamp.timestamp() % 86400  # seconds since midnight
-            except:
-                time_feature = 0
-        else:
-            time_feature = 0
-            
+                    # Handle different timestamp formats
+                    try:
+                        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    except ValueError:
+                        # Try with different format
+                        timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                elif isinstance(timestamp, (int, float)):
+                    # Unix timestamp
+                    timestamp = datetime.fromtimestamp(timestamp)
+                    
+                # Calculate seconds since midnight
+                time_feature = (timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second)
+            except Exception as e:
+                print(f"Warning: Could not parse timestamp: {e}, defaulting to 0")
+        
         # Normalize time and amount (if scaler not available)
         if self.scaler is None:
-            time_feature = (time_feature - self.time_mean) / self.time_std
-            amount_normalized = (amount - self.amount_mean) / self.amount_std
+            time_feature = (time_feature - self.time_mean) / self.time_std if self.time_std != 0 else 0
+            amount_normalized = (amount - self.amount_mean) / self.amount_std if self.amount_std != 0 else 0
         else:
             # The scaler will handle this during prediction
             time_feature = time_feature
             amount_normalized = amount
             
         # Generate synthetic V1-V28 features based on available transaction data
-        # This is an approximation - in a real system you'd need domain expertise
         v_features = self._generate_v_features(transaction_data)
         
         # Combine all features
-        features = np.array([time_feature] + v_features + [amount_normalized])
+        features = np.array([time_feature] + v_features + [amount_normalized], dtype=np.float64)
         
         return features
     
@@ -109,15 +121,24 @@ class TransactionTransformer:
         v_features = [0.0] * 28
         
         # Extract useful information that might correlate with fraud patterns
-        amount = transaction_data.get('amount', 0)
-        is_online = transaction_data.get('is_online', False)
-        merchant_category = transaction_data.get('merchant_category', '')
-        unusual_location = transaction_data.get('unusual_location', False)
-        high_frequency = transaction_data.get('high_frequency', False)
+        # Use more robust type checking and error handling
+        try:
+            amount = float(transaction_data.get('amount', 0))
+        except (ValueError, TypeError):
+            amount = 0
+        
+        # Boolean values with proper defaults
+        is_online = bool(transaction_data.get('is_online', False))
+        unusual_location = bool(transaction_data.get('unusual_location', False))
+        high_frequency = bool(transaction_data.get('high_frequency', False))
+        card_present = bool(transaction_data.get('card_present', True))
+        
+        # String values with proper defaults
+        merchant_category = str(transaction_data.get('merchant_category', ''))
+        merchant_name = str(transaction_data.get('merchant_name', ''))
+        country = str(transaction_data.get('country', ''))
         
         # Set some values based on transaction characteristics
-        # These mappings are arbitrary and would need tuning based on your data
-        
         # V1: Often correlates with transaction type
         v_features[0] = -1.2 if is_online else 0.5
         
@@ -125,7 +146,8 @@ class TransactionTransformer:
         v_features[1] = -0.5 if amount > 200 else 0.3
         
         # V3: Could relate to merchant category
-        if merchant_category in ['jewelry', 'electronics', 'travel']:
+        high_risk_categories = ['jewelry', 'electronics', 'travel', 'gambling', 'cryptocurrency']
+        if any(category in merchant_category.lower() for category in high_risk_categories):
             v_features[2] = -0.7  # Higher risk categories
         else:
             v_features[2] = 0.2
@@ -136,9 +158,20 @@ class TransactionTransformer:
         # V5: Could relate to transaction frequency
         v_features[4] = -0.8 if high_frequency else 0.2
         
+        # V6: Card present vs not present
+        v_features[5] = 0.4 if card_present else -0.6
+        
+        # V7: Country risk factor
+        high_risk_countries = ['NG', 'RO', 'RU', 'UA']
+        if country in high_risk_countries:
+            v_features[6] = -0.9
+        else:
+            v_features[6] = 0.3
+        
         # For remaining features, we use small random values to approximate distribution
-        # In a real system, you'd map these to actual transaction attributes
-        for i in range(5, 28):
+        # Using a fixed seed for consistency in predictions
+        np.random.seed(hash(str(transaction_data)) % 2**32)
+        for i in range(7, 28):
             v_features[i] = np.random.normal(0, 0.3)  # centered around 0 with small variance
         
         return v_features
