@@ -24,6 +24,26 @@ from collections import Counter
 import os
 import datetime
 import joblib  # Add this import for saving models
+import uvicorn
+import logging
+from api import app
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("api_debug.log"),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger("api")
+
+# Print all registered routes for debugging
+logger.info("Registered API routes:")
+for route in app.routes:
+    logger.info(f"Route: {route.path}, methods: {route.methods}")
 
 # Create directory for saving visualizations
 def create_viz_dir():
@@ -238,3 +258,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # Set host and port from environment variables or use defaults
+    host = os.getenv("API_HOST", "0.0.0.0")
+    port = int(os.getenv("API_PORT", 8000))
+    
+    logger.info(f"Starting API server on {host}:{port}")
+    uvicorn.run("main:app", host=host, port=port, reload=True)
