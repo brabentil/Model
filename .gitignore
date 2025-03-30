@@ -20,8 +20,6 @@ var/
 .installed.cfg
 *.egg
 
-# Visualizations (optional - include if you want to keep them out of git)
-visualizations/
 
 # Jupyter Notebook
 .ipynb_checkpoints
