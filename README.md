@@ -87,29 +87,29 @@ Summary of model performance metrics:
 
 ### ROC Curves
 
-![ROC Curve Comparison](visualizations/roc_curve_comparison.png)
+![ROC Curve Comparison](./visualizations/roc_curve_comparison.png)
 
 *ROC curves comparing the performance of all models. The Random Forest model (shown in green) demonstrates excellent discrimination ability.*
 
 ### Confusion Matrices
 
-![Random Forest Confusion Matrix](visualizations/random_forest_confusion_matrix.png)
+![Random Forest Confusion Matrix](./visualizations/random_forest_confusion_matrix.png)
 
 *Confusion matrix for the Random Forest model showing the distribution of true positives, false positives, true negatives, and false negatives.*
 
 ### Feature Importance
 
-![Feature Importance](visualizations/feature_importance.png)
+![Feature Importance](./visualizations/feature_importance.png)
 
 *Top features contributing to the Random Forest model's fraud detection capability.*
 
 ### Class Distribution
 
-![Class Distribution Before SMOTE](visualizations/class_distribution_before.png)
+![Class Distribution Before SMOTE](./visualizations/class_distribution_before.png)
 
 *Highly imbalanced original class distribution showing the rarity of fraud cases.*
 
-![Class Distribution After SMOTE](visualizations/class_distribution_after.png)
+![Class Distribution After SMOTE](./visualizations/class_distribution_after.png)
 
 *Balanced class distribution after applying SMOTE technique.*
 
