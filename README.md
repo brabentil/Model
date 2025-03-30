@@ -83,39 +83,50 @@ Summary of model performance metrics:
 | Decision Tree | 99.78% | 0.42 | 0.80 | 0.55 | 0.897 |
 | **Random Forest** | **99.94%** | **0.83** | **0.83** | **0.83** | **0.913** |
 
+
+---
+
 ## Visualizations
-
-### ROC Curves
-
-![ROC Curve Comparison](./visualizations/roc_curve_comparison.png)
-
-*ROC curves comparing the performance of all models. The Random Forest model (shown in green) demonstrates excellent discrimination ability.*
-
-### Confusion Matrices
-
-![Random Forest Confusion Matrix](./visualizations/random_forest_confusion_matrix.png)
-
-*Confusion matrix for the Random Forest model showing the distribution of true positives, false positives, true negatives, and false negatives.*
-
-### Feature Importance
-
-![Feature Importance](./visualizations/feature_importance.png)
-
-*Top features contributing to the Random Forest model's fraud detection capability.*
 
 ### Class Distribution
 
-![Class Distribution Before SMOTE](./visualizations/class_distribution_before.png)
+![Class Distribution](./visualizations/class_distribution.png)  
+*Visual representation of the class distribution before and after preprocessing.*
 
-*Highly imbalanced original class distribution showing the rarity of fraud cases.*
+### Confusion Matrices
 
-![Class Distribution After SMOTE](./visualizations/class_distribution_after.png)
+#### Decision Tree
+![Decision Tree Confusion Matrix](./visualizations/confusion_matrix_decision_tree.png)  
+*Confusion matrix for the Decision Tree model showing classification performance.*
 
-*Balanced class distribution after applying SMOTE technique.*
+#### K-Nearest Neighbors (KNN)
+![KNN Confusion Matrix](./visualizations/confusion_matrix_knn.png)  
+*Confusion matrix for the KNN model highlighting classification results.*
 
-## API Usage
+#### Logistic Regression
+![Logistic Regression Confusion Matrix](./visualizations/confusion_matrix_logistic_regression.png)  
+*Confusion matrix for the Logistic Regression model.*
 
-The model is exposed through a REST API for integration with other systems:
+#### Random Forest
+![Random Forest Confusion Matrix](./visualizations/confusion_matrix_random_forest.png)  
+*Confusion matrix for the Random Forest model, displaying prediction performance.*
+
+### Correlation Matrix
+
+![Correlation Matrix](./visualizations/correlation_matrix.png)  
+*Heatmap showing feature correlations within the dataset.*
+
+### Feature Importance
+
+![Feature Importance](./visualizations/feature_importance.png)  
+*Key features contributing to fraud detection as determined by the model.*
+
+### PCA Visualization
+
+![PCA Visualization](./visualizations/pca_visualization.png)  
+*Principal Component Analysis (PCA) representation of the dataset for dimensionality reduction.*
+
+---
 
 ```bash
 # Start the API server
